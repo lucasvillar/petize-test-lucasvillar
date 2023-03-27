@@ -15,20 +15,43 @@ services:
       - db:/var/lib/mysql
       - ./conf/mysql_init.sql:/data/application/mysql_init.sql
 
-
   rabbitmq:
     image: rabbitmq:management
     env_file: ./.env
     ports:
-      - $RABBITMQ_ELARNG_LOCAL_PORT:5672
-      - $RABBITMQ_API_LOCAL_PORT:15672
+      - $RABBITMQ_API_LOCAL_PORT:5672
+      - $RABBITMQ_MANAGEMENT_LOCAL_PORT:15672
     volumes:
       - rabbitmq:/var/lib/rabbitmq/
       - ./conf/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./conf/rabbitmq-definition.json:/etc/rabbitmq/definitions.json:ro
+
+  app:
+    depends_on:
+      - mysqldb
+      - rabbitmq
+    build: .
+    restart: on-failure
+    env_file: ./.env
+    ports:
+      - $SPRING_LOCAL_PORT:$SPRING_DOCKER_PORT
     environment:
-      - RABBITMQ_DEFAULT_USER=$RABBITMQ_USER
-      - RABBITMQ_DEFAULT_PASS=$RABBITMQ_PASS
+      SPRING_APPLICATION_JSON: '{
+        "spring.datasource.url"  : "jdbc:mysql://mysqldb:$MYSQLDB_DOCKER_PORT/$MYSQLDB_DATABASE?allowPublicKeyRetrieval=true&useSSL=false",
+        "spring.datasource.username" : "$MYSQLDB_USER",
+        "spring.datasource.password" : "$MYSQLDB_ROOT_PASSWORD",
+        "spring.jpa.properties.hibernate.dialect" : "org.hibernate.dialect.MySQL8Dialect",
+        "spring.jpa.hibernate.ddl-auto" : "update",
+        "app.queues.alterarStatusPedido": "pedido_statuspedido_update",
+        "spring.rabbitmq.host": "rabbitmq",
+        "spring.rabbitmq.port": $RABBITMQ_API_LOCAL_PORT,
+        "spring.rabbitmq.username": "app",
+        "spring.rabbitmq.password": "appapp"
+      }'
+    volumes:
+      - .m2:/root/.m2
+    stdin_open: true
+    tty: true
 
 volumes:
   db:
